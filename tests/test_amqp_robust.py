@@ -23,6 +23,7 @@ class Proxy:
 
         self.loop = loop
 
+        self.server = None
         self.src_host = shost
         self.src_port = sport
         self.dst_host = dhost
@@ -54,14 +55,17 @@ class Proxy:
         ])
 
     async def start(self):
-        result = await asyncio.start_server(
+        self.server = await asyncio.start_server(
             self.handle_client,
             host=self.src_host,
             port=self.src_port,
             loop=self.loop,
         )
 
-        return result
+        return self.server
+
+    async def stop(self):
+        await self.server.close()
 
     async def disconnect(self):
         tasks = list()
@@ -168,7 +172,13 @@ class TestCase(AMQPTestCase):
 
         self.assertEqual(reconnect_count, 1)
 
-    async def test_robust_reconnect(self):
+    async def test_robust_reconnect__no_downtime(self):
+        await self._test_robust_reconnect(proxy_downtime=0)
+
+    async def test_robust_reconnect__with_downtime(self):
+        await self._test_robust_reconnect(proxy_downtime=1)
+
+    async def _test_robust_reconnect(self, *, proxy_downtime):
         channel1 = await self.create_channel()
         channel2 = await self.create_channel()
 
@@ -182,6 +192,13 @@ class TestCase(AMQPTestCase):
                     shared.append(message)
                     await message.ack()
 
+        async def restart_proxy(proxy):
+            await proxy.disconnect()
+            if proxy_downtime:
+                await proxy.stop()
+                await asyncio.sleep(proxy_downtime, loop=self.loop)
+                await proxy.start()
+
         reader_task = self.loop.create_task(reader())
         self.addCleanup(reader_task.cancel)
 
@@ -191,7 +208,7 @@ class TestCase(AMQPTestCase):
             )
 
         logging.info("Disconnect all clients")
-        await self.proxy.disconnect()
+        await restart_proxy(self.proxy)
 
         logging.info("Waiting for reconnect")
         await asyncio.sleep(5, loop=self.loop)
