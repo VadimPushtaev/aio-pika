@@ -79,7 +79,7 @@ class Proxy:
             writer = self.connections.pop()     # type: asyncio.StreamWriter
             tasks.append(self.loop.create_task(close(writer)))
 
-        await asyncio.wait(tasks, loop=self.loop)
+        await asyncio.wait(tasks)
 
 
 class TestCase(AMQPTestCase):
@@ -212,13 +212,13 @@ class TestCase(AMQPTestCase):
         await restart_proxy(self.proxy)
 
         logging.info("Waiting for reconnect")
-        await asyncio.sleep(5, loop=self.loop)
+        await asyncio.sleep(5)
 
         logging.info("Waiting connections")
         await asyncio.wait([
             channel1._connection.ready(),
             channel2._connection.ready()
-        ], loop=self.loop)
+        ])
 
         for _ in range(5):
             await channel2.default_exchange.publish(
@@ -226,7 +226,7 @@ class TestCase(AMQPTestCase):
             )
 
         while len(shared) < 10:
-            await asyncio.sleep(0.1, loop=self.loop)
+            await asyncio.sleep(0.1)
 
         assert len(shared) == 10
 
