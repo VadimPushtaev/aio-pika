@@ -65,7 +65,8 @@ class Proxy:
         return self.server
 
     async def stop(self):
-        await self.server.close()
+        self.server.close()
+        await self.server.wait_closed()
 
     async def disconnect(self):
         tasks = list()
